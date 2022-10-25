@@ -59,10 +59,10 @@ export class CdkStackALBEksBg extends cdk.Stack {
 
     // CODEBUILD - project Front
     const projectFront = new codebuild.Project(this, 'MyProjectFront', {
-      projectName: `${this.stackName}`,
+      projectName: `${this.stackName}-Front`,
       source: codebuild.Source.codeCommit({ repository: repositoryFront }),
       environment: {
-        buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage', {
+        buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImageFront', {
           directory: '../dockerAssets.d',
         }),
         privileged: true
@@ -122,10 +122,10 @@ export class CdkStackALBEksBg extends cdk.Stack {
 
     // CODEBUILD - project Back
     const projectBack = new codebuild.Project(this, 'MyProjectBack', {
-      projectName: `${this.stackName}`,
+      projectName: `${this.stackName}-Back`,
       source: codebuild.Source.codeCommit({ repository: repositoryBack }),
       environment: {
-        buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage', {
+        buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImageBack', {
           directory: '../dockerAssets.d',
         }),
         privileged: true
@@ -166,7 +166,7 @@ export class CdkStackALBEksBg extends cdk.Stack {
               "isDeployed=$(kubectl get deploy -o json | jq '.items[0]')",
               "deploy8080=$(kubectl get svc -o wide | grep 8080: | tr ' ' '\n' | grep app= | sed 's/app=//g')",
               "echo $isDeployed $deploy8080",
-              "if [[ \"$isDeployed\" == \"null\" ]]; then kubectl apply -f back.yaml; else kubectl set image deployment rolling-server rolling-server=$ECR_REPO_URI_BACK:$TAG; fi",
+              "if [[ \"$isDeployed\" == \"null\" ]]; then kubectl apply -f db.yaml && kubectl apply -f back.yaml; else kubectl set image deployment rolling-server rolling-server=$ECR_REPO_URI_BACK:$TAG; fi",
               'kubectl get deploy',
               'kubectl get svc'
             ]
@@ -294,14 +294,14 @@ export class CdkStackALBEksBg extends cdk.Stack {
     }))
 
 
-    new cdk.CfnOutput(this, 'CodeCommitRepoName', { value: `${repositoryFront.repositoryName}` })
-    new cdk.CfnOutput(this, 'CodeCommitRepoArn', { value: `${repositoryFront.repositoryArn}` })
-    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSsh', { value: `${repositoryFront.repositoryCloneUrlSsh}` })
-    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttp', { value: `${repositoryFront.repositoryCloneUrlHttp}` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoNameFront', { value: `${repositoryFront.repositoryName}Front` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoArnFront', { value: `${repositoryFront.repositoryArn}Front` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSshFront', { value: `${repositoryFront.repositoryCloneUrlSsh}Front` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttpFront', { value: `${repositoryFront.repositoryCloneUrlHttp}Front` })
     
-    new cdk.CfnOutput(this, 'CodeCommitRepoName', { value: `${repositoryBack.repositoryName}` })
-    new cdk.CfnOutput(this, 'CodeCommitRepoArn', { value: `${repositoryBack.repositoryArn}` })
-    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSsh', { value: `${repositoryBack.repositoryCloneUrlSsh}` })
-    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttp', { value: `${repositoryBack.repositoryCloneUrlHttp}` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoNameBack', { value: `${repositoryBack.repositoryName}Back` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoArnBack', { value: `${repositoryBack.repositoryArn}Back` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSshBack', { value: `${repositoryBack.repositoryCloneUrlSsh}Back` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttpBack', { value: `${repositoryBack.repositoryCloneUrlHttp}Back` })
   }
 }
