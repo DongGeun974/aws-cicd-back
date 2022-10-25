@@ -47,19 +47,20 @@ export class CdkStackALBEksBg extends cdk.Stack {
       mastersRole: clusterAdmin,
       outputClusterName: true,
     });
+    
+    
 
-    const ecrRepo = new ecr.Repository(this, 'EcrRepo');
+    const ecrRepoFront = new ecr.Repository(this, 'ecrRepoFront');
 
-    const repository = new codecommit.Repository(this, 'CodeCommitRepo', {
-      repositoryName: `${this.stackName}-repo`
+    const repositoryFront = new codecommit.Repository(this, 'CodeCommitRepoFront', {
+      repositoryName: `${this.stackName}-repo-Front`
     });
 
 
-
-    // CODEBUILD - project
-    const project = new codebuild.Project(this, 'MyProject', {
+    // CODEBUILD - project Front
+    const projectFront = new codebuild.Project(this, 'MyProjectFront', {
       projectName: `${this.stackName}`,
-      source: codebuild.Source.codeCommit({ repository }),
+      source: codebuild.Source.codeCommit({ repository: repositoryFront }),
       environment: {
         buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage', {
           directory: '../dockerAssets.d',
@@ -70,8 +71,8 @@ export class CdkStackALBEksBg extends cdk.Stack {
         'CLUSTER_NAME': {
           value: `${cluster.clusterName}`
         },
-        'ECR_REPO_URI': {
-          value: `${ecrRepo.repositoryUri}`
+        'ECR_REPO_URI_FRONT': {
+          value: `${ecrRepoFront.repositoryUri}`
         }
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -89,37 +90,42 @@ export class CdkStackALBEksBg extends cdk.Stack {
           },
           build: {
             commands: [
-              'cd flask-docker-app',
-              `docker build -t $ECR_REPO_URI:$TAG .`,
-              'docker push $ECR_REPO_URI:$TAG'
+              'cd CICD-rolling-front',
+              `docker build -t $ECR_REPO_URI_FRONT:$TAG .`,
+              'docker push $ECR_REPO_URI_FRONT:$TAG'
             ]
           },
           post_build: {
             commands: [
-              'kubectl get nodes -n flask-alb',
-              'kubectl get deploy -n flask-alb',
-              'kubectl get svc -n flask-alb',
-              "isDeployed=$(kubectl get deploy -n flask-alb -o json | jq '.items[0]')",
-              "deploy8080=$(kubectl get svc -n flask-alb -o wide | grep 8080: | tr ' ' '\n' | grep app= | sed 's/app=//g')",
+              'kubectl get nodes',
+              'kubectl get deploy',
+              'kubectl get svc',
+              "isDeployed=$(kubectl get deploy -o json | jq '.items[0]')",
+              "deploy8080=$(kubectl get svc -o wide | grep 8080: | tr ' ' '\n' | grep app= | sed 's/app=//g')",
               "echo $isDeployed $deploy8080",
-              "if [[ \"$isDeployed\" == \"null\" ]]; then kubectl apply -f k8s/flaskALBBlue.yaml && kubectl apply -f k8s/flaskALBGreen.yaml; else kubectl set image deployment/$deploy8080 -n flask-alb flask=$ECR_REPO_URI:$TAG; fi",
-              'kubectl get deploy -n flask-alb',
-              'kubectl get svc -n flask-alb'
+              "if [[ \"$isDeployed\" == \"null\" ]]; then kubectl apply -f front.yaml; else kubectl set image deployment rolling-front rolling-front=$ECR_REPO_URI_FRONT:$TAG; fi",
+              'kubectl get deploy',
+              'kubectl get svc'
             ]
           }
         }
       })
     })
+    
+    
+    const ecrRepoBack = new ecr.Repository(this, 'ecrRepoBack');
+
+    const repositoryBack = new codecommit.Repository(this, 'CodeCommitRepoBack', {
+      repositoryName: `${this.stackName}-repo-Back`
+    });
 
 
-
-
-    // CODEBUILD - project2
-    const project2 = new codebuild.Project(this, 'MyProject2', {
-      projectName: `${this.stackName}2`,
-      source: codebuild.Source.codeCommit({ repository }),
+    // CODEBUILD - project Back
+    const projectBack = new codebuild.Project(this, 'MyProjectBack', {
+      projectName: `${this.stackName}`,
+      source: codebuild.Source.codeCommit({ repository: repositoryBack }),
       environment: {
-        buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage2', {
+        buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage', {
           directory: '../dockerAssets.d',
         }),
         privileged: true
@@ -128,8 +134,8 @@ export class CdkStackALBEksBg extends cdk.Stack {
         'CLUSTER_NAME': {
           value: `${cluster.clusterName}`
         },
-        'ECR_REPO_URI': {
-          value: `${ecrRepo.repositoryUri}`
+        'ECR_REPO_URI_BACK': {
+          value: `${ecrRepoBack.repositoryUri}`
         }
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -139,27 +145,30 @@ export class CdkStackALBEksBg extends cdk.Stack {
             commands: [
               'env',
               'export TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}',
-              '/usr/local/bin/entrypoint.sh'
+              'export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output=text)',
+              '/usr/local/bin/entrypoint.sh',
+              'echo Logging in to Amazon ECR',
+              'aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com'
             ]
           },
           build: {
             commands: [
-              'cd flask-docker-app',
-              'echo "Dummy Action"'
+              'cd CICD-rolling-back',
+              `docker build -t $ECR_REPO_URI_BACK:$TAG .`,
+              'docker push $ECR_REPO_URI_BACK:$TAG'
             ]
           },
           post_build: {
             commands: [
-              'kubectl get nodes -n flask-alb',
-              'kubectl get deploy -n flask-alb',
-              'kubectl get svc -n flask-alb',
-              "deploy8080=$(kubectl get svc -n flask-alb -o wide | grep ' 8080:' | tr ' ' '\n' | grep app= | sed 's/app=//g')",
-              "deploy80=$(kubectl get svc -n flask-alb -o wide | grep ' 80:' | tr ' ' '\n' | grep app= | sed 's/app=//g')",
-              "echo $deploy80 $deploy8080",
-              "kubectl patch svc flask-svc-alb-blue -n flask-alb -p '{\"spec\":{\"selector\": {\"app\": \"'$deploy8080'\"}}}'",
-              "kubectl patch svc flask-svc-alb-green -n flask-alb -p '{\"spec\":{\"selector\": {\"app\": \"'$deploy80'\"}}}'",
-              'kubectl get deploy -n flask-alb',
-              'kubectl get svc -n flask-alb'
+              'kubectl get nodes',
+              'kubectl get deploy',
+              'kubectl get svc',
+              "isDeployed=$(kubectl get deploy -o json | jq '.items[0]')",
+              "deploy8080=$(kubectl get svc -o wide | grep 8080: | tr ' ' '\n' | grep app= | sed 's/app=//g')",
+              "echo $isDeployed $deploy8080",
+              "if [[ \"$isDeployed\" == \"null\" ]]; then kubectl apply -f back.yaml; else kubectl set image deployment rolling-server rolling-server=$ECR_REPO_URI_BACK:$TAG; fi",
+              'kubectl get deploy',
+              'kubectl get svc'
             ]
           }
         }
@@ -169,28 +178,45 @@ export class CdkStackALBEksBg extends cdk.Stack {
 
 
 
-
     // PIPELINE
 
     const sourceOutput = new codepipeline.Artifact();
 
-    const sourceAction = new codepipeline_actions.CodeCommitSourceAction({
+    const sourceActionFront = new codepipeline_actions.CodeCommitSourceAction({
       actionName: 'CodeCommit',
-      repository,
+      repository: repositoryFront,
+      output: sourceOutput,
+    });
+    
+    const sourceActionBack = new codepipeline_actions.CodeCommitSourceAction({
+      actionName: 'CodeCommit',
+      repository: repositoryBack,
       output: sourceOutput,
     });
 
-    const buildAction = new codepipeline_actions.CodeBuildAction({
+    const buildActionFornt = new codepipeline_actions.CodeBuildAction({
       actionName: 'CodeBuild',
-      project: project,
+      project: projectFront,
       input: sourceOutput,
       outputs: [new codepipeline.Artifact()], // optional
     });
-
-
-    const buildAction2 = new codepipeline_actions.CodeBuildAction({
+    
+    const buildActionBack = new codepipeline_actions.CodeBuildAction({
       actionName: 'CodeBuild',
-      project: project2,
+      project: projectFront,
+      input: sourceOutput,
+      outputs: [new codepipeline.Artifact()], // optional
+    });
+    
+    const buildActionFront2 = new codepipeline_actions.CodeBuildAction({
+      actionName: 'CodeBuild',
+      project: projectFront,
+      input: sourceOutput,
+    });
+
+    const buildActionBack2 = new codepipeline_actions.CodeBuildAction({
+      actionName: 'CodeBuild',
+      project: projectBack,
       input: sourceOutput,
     });
 
@@ -201,15 +227,15 @@ export class CdkStackALBEksBg extends cdk.Stack {
 
 
 
-    new codepipeline.Pipeline(this, 'MyPipeline', {
+    new codepipeline.Pipeline(this, 'MyPipelineFront', {
       stages: [
         {
           stageName: 'Source',
-          actions: [sourceAction],
+          actions: [sourceActionFront],
         },
         {
           stageName: 'BuildAndDeploy',
-          actions: [buildAction],
+          actions: [buildActionFornt],
         },
         {
           stageName: 'ApproveSwapBG',
@@ -217,35 +243,65 @@ export class CdkStackALBEksBg extends cdk.Stack {
         },
         {
           stageName: 'SwapBG',
-          actions: [buildAction2],
+          actions: [buildActionFront2],
+        },
+      ],
+    });
+    
+    new codepipeline.Pipeline(this, 'MyPipelineBack', {
+      stages: [
+        {
+          stageName: 'Source',
+          actions: [sourceActionBack],
+        },
+        {
+          stageName: 'BuildAndDeploy',
+          actions: [buildActionBack],
+        },
+        {
+          stageName: 'ApproveSwapBG',
+          actions: [manualApprovalAction],
+        },
+        {
+          stageName: 'SwapBG',
+          actions: [buildActionBack2],
         },
       ],
     });
 
 
-    repository.onCommit('OnCommit', {
-      target: new targets.CodeBuildProject(project)
+    repositoryFront.onCommit('OnCommit', {
+      target: new targets.CodeBuildProject(projectFront)
+    });
+    
+    repositoryBack.onCommit('OnCommit', {
+      target: new targets.CodeBuildProject(projectBack)
     });
 
-    ecrRepo.grantPullPush(project.role!)
-    cluster.awsAuth.addMastersRole(project.role!)
-    project.addToRolePolicy(new iam.PolicyStatement({
+    ecrRepoFront.grantPullPush(projectFront.role!)
+    cluster.awsAuth.addMastersRole(projectFront.role!)
+    projectFront.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:DescribeCluster'],
       resources: [`${cluster.clusterArn}`],
     }))
 
 
-    ecrRepo.grantPullPush(project2.role!)
-    cluster.awsAuth.addMastersRole(project2.role!)
-    project2.addToRolePolicy(new iam.PolicyStatement({
+    ecrRepoBack.grantPullPush(projectBack.role!)
+    cluster.awsAuth.addMastersRole(projectBack.role!)
+    projectBack.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:DescribeCluster'],
       resources: [`${cluster.clusterArn}`],
     }))
 
 
-    new cdk.CfnOutput(this, 'CodeCommitRepoName', { value: `${repository.repositoryName}` })
-    new cdk.CfnOutput(this, 'CodeCommitRepoArn', { value: `${repository.repositoryArn}` })
-    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSsh', { value: `${repository.repositoryCloneUrlSsh}` })
-    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttp', { value: `${repository.repositoryCloneUrlHttp}` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoName', { value: `${repositoryFront.repositoryName}` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoArn', { value: `${repositoryFront.repositoryArn}` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSsh', { value: `${repositoryFront.repositoryCloneUrlSsh}` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttp', { value: `${repositoryFront.repositoryCloneUrlHttp}` })
+    
+    new cdk.CfnOutput(this, 'CodeCommitRepoName', { value: `${repositoryBack.repositoryName}` })
+    new cdk.CfnOutput(this, 'CodeCommitRepoArn', { value: `${repositoryBack.repositoryArn}` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlSsh', { value: `${repositoryBack.repositoryCloneUrlSsh}` })
+    new cdk.CfnOutput(this, 'CodeCommitCloneUrlHttp', { value: `${repositoryBack.repositoryCloneUrlHttp}` })
   }
 }
