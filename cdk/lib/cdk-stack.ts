@@ -81,6 +81,7 @@ export class CdkStackALBEksBg extends cdk.Stack {
           pre_build: {
             commands: [
               'env',
+              'docker login --username $DOCKER_USERNAME --password $DOCKER_PASSWORD',
               'export TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}',
               'export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output=text)',
               '/usr/local/bin/entrypoint.sh',
@@ -144,6 +145,7 @@ export class CdkStackALBEksBg extends cdk.Stack {
           pre_build: {
             commands: [
               'env',
+              'docker login --username $DOCKER_USERNAME --password $DOCKER_PASSWORD',
               'export TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}',
               'export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output=text)',
               '/usr/local/bin/entrypoint.sh',
