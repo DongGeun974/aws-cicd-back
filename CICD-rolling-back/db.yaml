@@ -1,0 +1,55 @@
+#db
+apiVersion: v1
+kind: Service
+metadata:
+  name: rolling-db
+  labels:
+    type: db
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    type: db
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    type: db
+  name: rolling-db
+spec:
+  replicas: 1
+  strategy:
+    type:  Recreate
+  selector:
+    matchLabels:
+      type: db
+  template:
+    metadata:
+      labels:
+        type: db
+    spec:
+      containers:
+      - image: mysql:5.7-debian
+        name: rolling-db
+        args:
+        - --character-set-server=utf8
+        - --collation-server=utf8_general_ci
+        - --explicit_defaults_for_timestamp=1
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: pass123#
+        - name: MYSQL_DATABASE
+          value: paperdb
+        - name: MYSQL_USER
+          value: user
+        - name: MYSQL_ROOT_HOST
+          value: '%'
+        - name: MYSQL_PASSWORD
+          value: user
+        ports:
+        - containerPort: 3306
+          name: rolling-db
+

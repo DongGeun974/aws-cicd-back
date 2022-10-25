@@ -1,0 +1,51 @@
+#back
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolling-server
+  labels:
+    app: rolling-server
+spec:
+  selector:
+    matchLabels:
+      app: rolling-server
+  replicas: 2
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: rolling-server
+    spec:
+      containers:
+      - name: rolling-server
+        image: oeckikekk/k8s-back:1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:mysql://rolling-db:3306/paperdb
+        - name: SPRING_DATASOURCE_USERNAME
+          value: user
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: user
+        - name: HIBERNATE_DDL-AUTO
+          value: create
+---
+# backend service
+apiVersion: v1
+kind: Service
+metadata:
+  name: rolling-server
+  labels:
+    app: rolling-server
+spec:
+  selector:
+    app: rolling-server
+  ports:
+  - protocol: 'TCP'
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+
